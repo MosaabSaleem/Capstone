@@ -16,19 +16,14 @@ LINEAR_WEIGHT_MODELS = ("logreg", "linear_svm")
 
 
 def build_search(model_key: str, seed: int = config.SEED) -> GridSearchCV:
-    clf = MODEL_FACTORIES[model_key]()
-    pipe = Pipeline([("clf", clf)])
+    pipe = Pipeline([("clf", MODEL_FACTORIES[model_key]())])
     cv = StratifiedKFold(n_splits=config.CV_FOLDS, shuffle=True, random_state=seed)
     return GridSearchCV(pipe, param_grid=config.PARAM_GRIDS[model_key],
                         scoring="f1_macro", cv=cv, n_jobs=-1, refit=True)
 
 
-def _clf(estimator):
-    return estimator.named_steps["clf"] if hasattr(estimator, "named_steps") else estimator
-
-
 def get_coef(estimator):
-    clf = _clf(estimator)
+    clf = estimator.named_steps["clf"] if hasattr(estimator, "named_steps") else estimator
     if hasattr(clf, "coef_"):
         return clf.coef_
     if hasattr(clf, "feature_log_prob_"):

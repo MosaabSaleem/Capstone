@@ -18,11 +18,10 @@ def utc_stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def log_result(row: dict[str, Any], path: Path = config.RESULTS_CSV) -> None:
+def log_result(row: dict, path: Path = config.RESULTS_CSV) -> None:
     row = {"timestamp": utc_stamp(), **row}
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing: list[dict[str, Any]] = []
-    fieldnames: list[str] = []
+    existing, fieldnames = [], []
     if path.exists():
         with path.open("r", newline="") as f:
             reader = csv.DictReader(f)
@@ -39,8 +38,7 @@ def log_result(row: dict[str, Any], path: Path = config.RESULTS_CSV) -> None:
         writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
-def print_row(row: dict[str, Any]) -> None:
+def print_row(row: dict) -> None:
     keys = ["model", "track", "variant", "accuracy", "macro_f1",
-            "latency_ms", "model_size_kb", "efficiency_index"]
-    parts = [f"{k}={row[k]}" for k in keys if k in row]
-    print("  " + " | ".join(parts))
+            "latency_ms", "model_size_kb", "weight_density", "efficiency_index"]
+    print("  " + " | ".join(f"{k}={row[k]}" for k in keys if k in row))

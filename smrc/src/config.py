@@ -34,11 +34,23 @@ FEATURE_SELECTORS = ["chi2", "mutual_info", "l1"]
 DOCFREQ_FILTERS = [(2, 1.0), (5, 1.0), (10, 0.9), (20, 0.8), (50, 0.7)]
 WEIGHT_PRUNE_SPARSITIES = [0.0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
 
+# --- FIX 1 support -----------------------------------------------------------
+# Mutual information is scored on BINARISED term presence (see pruning.py), which
+# is the classical text feature-selection formulation and keeps X sparse.
+# Optionally fit the selector on a stratified subsample for speed.
+# Set to None to score on all rows.
+MI_SUBSAMPLE = 30_000
+
 QUANT_BITS = [16, 8, 4]
 QUANT_SCHEME = "symmetric"
 
 LATENCY_REPEATS = 5
 LATENCY_SAMPLE_SIZE = 2_000
+
+# --- FIX 2 support -----------------------------------------------------------
+# Below this density, storing a weight matrix as CSR is the sensible deployment
+# choice, so the reported model size should reflect the sparse footprint.
+SPARSE_STORAGE_THRESHOLD = 0.5
 
 EFFICIENCY_ALPHA = 1.0
 EFFICIENCY_BETA = 1.0

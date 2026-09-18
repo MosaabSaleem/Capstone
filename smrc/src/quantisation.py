@@ -23,9 +23,9 @@ def quantise_array(w, bits: int, scheme: str = "symmetric"):
     if w_max == w_min:
         return w.copy(), 1.0, 0
     scale = (w_max - w_min) / (2 * qmax + 1)
-    zero_point = int(round(-w_min / scale))
-    q = np.clip(np.round(w / scale) + zero_point, 0, 2 * qmax + 1)
-    return (q - zero_point) * scale, scale, zero_point
+    zp = int(round(-w_min / scale))
+    q = np.clip(np.round(w / scale) + zp, 0, 2 * qmax + 1)
+    return (q - zp) * scale, scale, zp
 
 
 def _quantise_attr(clf, attr, bits, scheme) -> int:
@@ -41,8 +41,8 @@ def _quantise_attr(clf, attr, bits, scheme) -> int:
 def apply_quantised_weights(estimator, bits: int, scheme: str = "symmetric"):
     est = copy.deepcopy(estimator)
     clf = est.named_steps["clf"] if hasattr(est, "named_steps") else est
-    quantised = sum(_quantise_attr(clf, a, bits, scheme) for a in QUANTISABLE_ATTRS)
-    if quantised == 0:
+    n = sum(_quantise_attr(clf, a, bits, scheme) for a in QUANTISABLE_ATTRS)
+    if n == 0:
         raise AttributeError("estimator exposes no quantisable parameter arrays")
     return est
 

@@ -9,21 +9,20 @@ from . import config
 
 def _load() -> pd.DataFrame:
     if not config.RESULTS_CSV.exists():
-        raise FileNotFoundError(
-            f"No results at {config.RESULTS_CSV}. Run the experiment scripts first.")
+        raise FileNotFoundError(f"No results at {config.RESULTS_CSV}.")
     df = pd.read_csv(config.RESULTS_CSV)
-    for col in ("accuracy", "macro_f1", "latency_ms", "model_size_kb",
-                "weight_sparsity", "keep_fraction", "bits", "efficiency_index"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+    for c in ("accuracy", "macro_f1", "latency_ms", "model_size_kb",
+              "model_size_dense_kb", "weight_sparsity", "keep_fraction",
+              "bits", "efficiency_index"):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
 
-def _save(fig, name: str):
-    path = config.FIGURES_DIR / name
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  wrote {path}")
+def _save(fig, name):
+    p = config.FIGURES_DIR / name
+    fig.savefig(p, dpi=150, bbox_inches="tight"); plt.close(fig)
+    print(f"  wrote {p}")
 
 
 def plot_weight_sparsity(df):
@@ -31,13 +30,32 @@ def plot_weight_sparsity(df):
     if sub.empty:
         return
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    for model, g in sub.groupby("model"):
+    for m, g in sub.groupby("model"):
         g = g.sort_values("weight_sparsity")
-        ax.plot(g["weight_sparsity"], g["accuracy"], marker="o", label=model)
+        ax.plot(g["weight_sparsity"], g["accuracy"], marker="o", label=m)
     ax.set_xlabel("Weight sparsity (fraction zeroed)"); ax.set_ylabel("Test accuracy")
     ax.set_title("Track A - accuracy vs weight sparsity")
     ax.grid(True, alpha=0.3); ax.legend()
     _save(fig, "trackA_weight_sparsity.png")
+
+
+def plot_weight_sparsity_size(df):
+    """NEW: shows the size saving that magnitude pruning actually delivers."""
+    sub = df[df.get("variant") == "weight_prune"] if "variant" in df else df.iloc[0:0]
+    if sub.empty or "model_size_kb" not in sub:
+        return
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for m, g in sub.groupby("model"):
+        g = g.sort_values("weight_sparsity")
+        ax.plot(g["weight_sparsity"], g["model_size_kb"], marker="o", label=f"{m} (sparse)")
+        if "model_size_dense_kb" in g:
+            ax.plot(g["weight_sparsity"], g["model_size_dense_kb"], marker="x",
+                    linestyle="--", alpha=0.6, label=f"{m} (dense)")
+    ax.set_xlabel("Weight sparsity (fraction zeroed)")
+    ax.set_ylabel("Model size (KB)")
+    ax.set_title("Track A - deployable size vs weight sparsity")
+    ax.grid(True, alpha=0.3); ax.legend(fontsize=8)
+    _save(fig, "trackA_weight_sparsity_size.png")
 
 
 def plot_feature_pruning(df):
@@ -45,9 +63,9 @@ def plot_feature_pruning(df):
     if sub.empty:
         return
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    for (model, sel), g in sub.groupby(["model", "selector"]):
+    for (m, s), g in sub.groupby(["model", "selector"]):
         g = g.sort_values("keep_fraction")
-        ax.plot(g["keep_fraction"], g["accuracy"], marker="o", label=f"{model}/{sel}")
+        ax.plot(g["keep_fraction"], g["accuracy"], marker="o", label=f"{m}/{s}")
     ax.set_xlabel("Fraction of vocabulary kept"); ax.set_ylabel("Test accuracy")
     ax.set_xscale("log"); ax.set_title("Track A - accuracy vs feature pruning")
     ax.grid(True, alpha=0.3); ax.legend(fontsize=8)
@@ -59,9 +77,9 @@ def plot_quantisation(df):
     if sub.empty:
         return
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    for model, g in sub.groupby("model"):
+    for m, g in sub.groupby("model"):
         g = g.sort_values("bits")
-        ax.plot(g["bits"], g["accuracy"], marker="o", label=model)
+        ax.plot(g["bits"], g["accuracy"], marker="o", label=m)
     ax.set_xlabel("Weight precision (bits)"); ax.set_ylabel("Test accuracy")
     ax.set_title("Track B - accuracy vs quantisation precision")
     ax.grid(True, alpha=0.3); ax.legend()
@@ -72,8 +90,8 @@ def plot_pareto(df):
     if not {"accuracy", "model_size_kb"}.issubset(df.columns):
         return
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    for track, g in df.groupby(df.get("track", "baseline").fillna("baseline")):
-        ax.scatter(g["model_size_kb"], g["accuracy"], label=str(track), alpha=0.7)
+    for t, g in df.groupby(df.get("track", "baseline").fillna("baseline")):
+        ax.scatter(g["model_size_kb"], g["accuracy"], label=str(t), alpha=0.7)
     ax.set_xlabel("Model size (KB)"); ax.set_ylabel("Test accuracy")
     ax.set_xscale("log"); ax.set_title("Accuracy vs model size")
     ax.grid(True, alpha=0.3); ax.legend(title="track")
@@ -100,6 +118,7 @@ def make_all():
     df = _load()
     config.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     plot_weight_sparsity(df)
+    plot_weight_sparsity_size(df)
     plot_feature_pruning(df)
     plot_quantisation(df)
     plot_pareto(df)

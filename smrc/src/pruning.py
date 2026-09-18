@@ -6,6 +6,33 @@ from scipy.sparse import csr_matrix
 from sklearn.feature_selection import (SelectFromModel, SelectKBest, chi2,
                                        mutual_info_classif)
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from . import config
+
+
+def _mutual_info_scorer(X, y):
+    """Mutual information over BINARISED term presence.
+
+    FIX: the previous call passed raw continuous TF-IDF values while asserting
+    discrete_features=True, so sklearn emitted ~20k warnings and the scores were
+    computed under a false assumption. The obvious repair, discrete_features
+    =False, is not available here because sklearn raises "Sparse matrix `X`
+    can't have continuous features", and densifying a 120k x 20k matrix is not
+    feasible.
+
+    The correct and standard repair is to binarise: score mutual information on
+    term PRESENCE rather than on the TF-IDF weight. This is exactly the
+    formulation used in the classic text feature-selection literature
+    (Yang and Pedersen, 1997), it keeps the matrix sparse, it is fast, and
+    discrete_features=True is then a true statement about the input.
+    """
+    Xb = (X > 0).astype(np.int8)          # term presence, still sparse
+    n = config.MI_SUBSAMPLE
+    if n is not None and Xb.shape[0] > n:
+        Xb, _, y, _ = train_test_split(
+            Xb, y, train_size=n, stratify=y, random_state=config.SEED)
+    return mutual_info_classif(
+        Xb, y, discrete_features=True, random_state=config.SEED)
 
 
 def make_feature_selector(method: str, keep_fraction: float, n_features: int):
@@ -13,8 +40,7 @@ def make_feature_selector(method: str, keep_fraction: float, n_features: int):
     if method == "chi2":
         return SelectKBest(chi2, k=k)
     if method == "mutual_info":
-        return SelectKBest(
-            lambda X, y: mutual_info_classif(X, y, discrete_features=True), k=k)
+        return SelectKBest(_mutual_info_scorer, k=k)
     if method == "l1":
         base = LogisticRegression(penalty="l1", solver="liblinear", C=1.0)
         return SelectFromModel(base, max_features=k, threshold=-np.inf)

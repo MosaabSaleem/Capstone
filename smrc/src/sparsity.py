@@ -6,23 +6,15 @@ from scipy.sparse import csr_matrix, issparse
 
 @dataclass
 class SparsityReport:
-    n_rows: int
-    n_cols: int
-    nnz: int
-    density: float
-    sparsity: float
-    sparse_bytes: int
-    dense_bytes: int
-    savings_bytes: int
-    savings_ratio: float
-    sparse_mb: float
-    dense_mb: float
+    n_rows: int; n_cols: int; nnz: int; density: float; sparsity: float
+    sparse_bytes: int; dense_bytes: int; savings_bytes: int
+    savings_ratio: float; sparse_mb: float; dense_mb: float
 
     def as_row(self, prefix: str = "") -> dict:
         return {f"{prefix}{k}": v for k, v in asdict(self).items()}
 
 
-def csr_footprint_bytes(X: csr_matrix) -> int:
+def csr_footprint_bytes(X) -> int:
     return int(X.data.nbytes + X.indices.nbytes + X.indptr.nbytes)
 
 
@@ -34,25 +26,17 @@ def analyse(X, itemsize: int = 8) -> SparsityReport:
     nnz = int(X.nnz)
     total = n_rows * n_cols
     density = (nnz / total) if total else 0.0
-    sparse_bytes = csr_footprint_bytes(X)
-    dense_bytes = int(total * itemsize)
-    return SparsityReport(
-        n_rows=n_rows, n_cols=n_cols, nnz=nnz,
-        density=round(density, 6), sparsity=round(1.0 - density, 6),
-        sparse_bytes=sparse_bytes, dense_bytes=dense_bytes,
-        savings_bytes=dense_bytes - sparse_bytes,
-        savings_ratio=round(dense_bytes / sparse_bytes, 1) if sparse_bytes else 0.0,
-        sparse_mb=round(sparse_bytes / (1024 ** 2), 3),
-        dense_mb=round(dense_bytes / (1024 ** 2), 3),
-    )
+    sb = csr_footprint_bytes(X)
+    db = int(total * itemsize)
+    return SparsityReport(n_rows, n_cols, nnz, round(density, 6),
+                          round(1.0 - density, 6), sb, db, db - sb,
+                          round(db / sb, 1) if sb else 0.0,
+                          round(sb / (1024 ** 2), 3), round(db / (1024 ** 2), 3))
 
 
-def pretty(report: SparsityReport) -> str:
-    return (
-        f"shape={report.n_rows}x{report.n_cols}  "
-        f"sparsity={report.sparsity:.4%}  nnz={report.nnz:,}\n"
-        f"  CSR footprint : {report.sparse_mb:,.3f} MB\n"
-        f"  dense equiv.  : {report.dense_mb:,.3f} MB\n"
-        f"  RAM saving    : {report.savings_ratio:,.1f}x "
-        f"({report.savings_bytes / (1024 ** 2):,.1f} MB saved)"
-    )
+def pretty(r: SparsityReport) -> str:
+    return (f"shape={r.n_rows}x{r.n_cols}  sparsity={r.sparsity:.4%}  nnz={r.nnz:,}\n"
+            f"  CSR footprint : {r.sparse_mb:,.3f} MB\n"
+            f"  dense equiv.  : {r.dense_mb:,.3f} MB\n"
+            f"  RAM saving    : {r.savings_ratio:,.1f}x "
+            f"({r.savings_bytes / (1024 ** 2):,.1f} MB saved)")

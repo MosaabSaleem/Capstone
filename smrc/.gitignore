@@ -1,8 +1,6 @@
 __pycache__/
 *.py[cod]
 .venv/
-venv/
-.ipynb_checkpoints/
 data/
 artifacts/
 *.pkl
