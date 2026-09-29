@@ -1,52 +1,67 @@
-"""Track B — simulated quantisation for classical models."""
+"""Track B: simulated low-precision quantisation for classical models.
+
+Quantisation is usually described for neural network layers, but any model
+that stores its knowledge in numeric arrays can be quantised the same way.
+
+  Logistic Regression and linear SVM   coef_ (weights) and intercept_ (bias)
+  Multinomial Naive Bayes              feature_log_prob_ and class_log_prior_
+
+This is simulated ("fake") quantisation. Each array is rounded onto a low-bit
+integer grid and then converted back to floating point. Prediction still runs
+in ordinary float arithmetic, but it carries exactly the rounding error a real
+low-precision implementation would introduce.
+"""
 from __future__ import annotations
+
 import copy
+
 import numpy as np
 
-QUANTISABLE_ATTRS = ("coef_", "intercept_", "feature_log_prob_", "class_log_prior_")
+from .baselines import classifier
+
+PARAMETER_ARRAYS = ("coef_", "intercept_", "feature_log_prob_", "class_log_prior_")
 
 
-def quantise_array(w, bits: int, scheme: str = "symmetric"):
-    w = np.asarray(w, dtype=np.float64)
-    qmax = (1 << (bits - 1)) - 1
+def quantise_array(values, bits: int, scheme: str = "symmetric") -> np.ndarray:
+    """Round an array onto a grid with 2 ** bits levels, then map it back."""
+    values = np.asarray(values, dtype=np.float64)
+    q_max = 2 ** (bits - 1) - 1  # 127 for 8 bits, 7 for 4 bits
+
     if scheme == "symmetric":
-        max_abs = float(np.max(np.abs(w))) or 1.0
-        scale = max_abs / qmax
-        q = np.clip(np.round(w / scale), -qmax - 1, qmax)
-        return q * scale, scale, 0
-    w_min, w_max = float(w.min()), float(w.max())
-    if w_max == w_min:
-        return w.copy(), 1.0, 0
-    scale = (w_max - w_min) / (2 * qmax + 1)
-    zp = int(round(-w_min / scale))
-    q = np.clip(np.round(w / scale) + zp, 0, 2 * qmax + 1)
-    return (q - zp) * scale, scale, zp
+        scale = (np.max(np.abs(values)) or 1.0) / q_max
+        return np.clip(np.round(values / scale), -q_max - 1, q_max) * scale
+
+    lo, hi = values.min(), values.max()
+    if hi == lo:
+        return values.copy()
+    scale = (hi - lo) / (2 * q_max + 1)
+    zero_point = round(-lo / scale)
+    q = np.clip(np.round(values / scale) + zero_point, 0, 2 * q_max + 1)
+    return (q - zero_point) * scale
 
 
-def _quantise_attr(clf, attr, bits, scheme) -> int:
-    arr = getattr(clf, attr, None)
-    if arr is None:
-        return 0
-    original = np.asarray(arr)
-    deq, _, _ = quantise_array(original, bits, scheme)
-    setattr(clf, attr, deq.astype(original.dtype))
-    return int(original.size)
-
-
-def apply_quantised_weights(estimator, bits: int, scheme: str = "symmetric"):
+def quantise_model(estimator, bits: int, scheme: str = "symmetric"):
+    """A copy of a fitted model with every learned parameter array quantised."""
     est = copy.deepcopy(estimator)
-    clf = est.named_steps["clf"] if hasattr(est, "named_steps") else est
-    n = sum(_quantise_attr(clf, a, bits, scheme) for a in QUANTISABLE_ATTRS)
-    if n == 0:
-        raise AttributeError("estimator exposes no quantisable parameter arrays")
+    clf = classifier(est)
+    changed = 0
+    for attr in PARAMETER_ARRAYS:
+        original = getattr(clf, attr, None)
+        if original is not None:
+            original = np.asarray(original)
+            setattr(clf, attr, quantise_array(original, bits, scheme).astype(original.dtype))
+            changed += 1
+    if not changed:
+        raise AttributeError("estimator has no parameter arrays to quantise")
     return est
 
 
 def count_parameters(estimator) -> int:
-    clf = estimator.named_steps["clf"] if hasattr(estimator, "named_steps") else estimator
-    return sum(int(np.asarray(getattr(clf, a)).size)
-               for a in QUANTISABLE_ATTRS if getattr(clf, a, None) is not None)
+    clf = classifier(estimator)
+    return sum(np.asarray(getattr(clf, a)).size
+               for a in PARAMETER_ARRAYS if getattr(clf, a, None) is not None)
 
 
-def theoretical_size_kb(n_params: int, bits: int) -> float:
-    return round((n_params * bits) / 8 / 1024, 3)
+def packed_size_kb(n_params: int, bits: int) -> float:
+    """Size of the parameters if they were stored at the given bit-width."""
+    return round(n_params * bits / 8 / 1024, 3)

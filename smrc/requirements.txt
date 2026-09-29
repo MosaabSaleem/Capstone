@@ -1,7 +1,10 @@
+# Minimum versions. Replace these with the exact versions from
+# results/environment.txt (written by scripts/print_env.py) to pin the
+# environment used for the reported run.
 scikit-learn>=1.3
 numpy>=1.24
-pandas>=2.0
 scipy>=1.10
+pandas>=2.0
 matplotlib>=3.7
-datasets>=2.14
 psutil>=5.9
+datasets>=2.14

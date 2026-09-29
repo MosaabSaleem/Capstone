@@ -1,41 +1,56 @@
-"""Point 1 — sparse structures and quantified RAM savings (CSR vs dense)."""
+"""Measuring how much memory sparse storage saves.
+
+A CSR matrix keeps only its non-zero values plus two index arrays, so its real
+footprint is the size of those three arrays. This module compares that against
+the size a dense array of the same shape would need.
+"""
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+
+from dataclasses import asdict, dataclass
+
 from scipy.sparse import csr_matrix, issparse
 
 
 @dataclass
 class SparsityReport:
-    n_rows: int; n_cols: int; nnz: int; density: float; sparsity: float
-    sparse_bytes: int; dense_bytes: int; savings_bytes: int
-    savings_ratio: float; sparse_mb: float; dense_mb: float
+    n_rows: int
+    n_cols: int
+    nnz: int
+    density: float
+    sparsity: float
+    sparse_mb: float
+    dense_mb: float
+    savings_ratio: float
 
-    def as_row(self, prefix: str = "") -> dict:
-        return {f"{prefix}{k}": v for k, v in asdict(self).items()}
+    def as_row(self) -> dict:
+        return asdict(self)
 
 
-def csr_footprint_bytes(X) -> int:
-    return int(X.data.nbytes + X.indices.nbytes + X.indptr.nbytes)
-
-
-def analyse(X, itemsize: int = 8) -> SparsityReport:
-    if not issparse(X):
-        X = csr_matrix(X)
-    X = X.tocsr()
+def analyse(X, bytes_per_value: int = 8) -> SparsityReport:
+    """Compare the CSR footprint of X against a dense float64 equivalent."""
+    X = csr_matrix(X) if not issparse(X) else X.tocsr()
     n_rows, n_cols = X.shape
-    nnz = int(X.nnz)
     total = n_rows * n_cols
-    density = (nnz / total) if total else 0.0
-    sb = csr_footprint_bytes(X)
-    db = int(total * itemsize)
-    return SparsityReport(n_rows, n_cols, nnz, round(density, 6),
-                          round(1.0 - density, 6), sb, db, db - sb,
-                          round(db / sb, 1) if sb else 0.0,
-                          round(sb / (1024 ** 2), 3), round(db / (1024 ** 2), 3))
+    density = X.nnz / total if total else 0.0
+
+    sparse_bytes = X.data.nbytes + X.indices.nbytes + X.indptr.nbytes
+    dense_bytes = total * bytes_per_value
+    mb = 1024 ** 2
+
+    return SparsityReport(
+        n_rows=n_rows,
+        n_cols=n_cols,
+        nnz=int(X.nnz),
+        density=round(density, 6),
+        sparsity=round(1 - density, 6),
+        sparse_mb=round(sparse_bytes / mb, 3),
+        dense_mb=round(dense_bytes / mb, 3),
+        savings_ratio=round(dense_bytes / sparse_bytes, 1) if sparse_bytes else 0.0,
+    )
 
 
-def pretty(r: SparsityReport) -> str:
-    return (f"shape={r.n_rows}x{r.n_cols}  sparsity={r.sparsity:.4%}  nnz={r.nnz:,}\n"
-            f"  CSR footprint : {r.sparse_mb:,.3f} MB\n"
-            f"  dense equiv.  : {r.dense_mb:,.3f} MB\n"
-            f"  RAM saving    : {r.savings_ratio:,.1f}x")
+def describe(r: SparsityReport) -> str:
+    return (f"shape {r.n_rows} x {r.n_cols}, {r.sparsity:.4%} zeros, {r.nnz:,} non-zeros\n"
+            f"  CSR:   {r.sparse_mb:,.2f} MB\n"
+            f"  dense: {r.dense_mb:,.2f} MB\n"
+            f"  saving: {r.savings_ratio:,.1f}x")

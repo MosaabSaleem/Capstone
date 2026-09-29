@@ -1,1 +1,1 @@
-"""Small Models, Real Constraints — package init."""
+"""Small Models, Real Constraints: lightweight text classification on CPU."""

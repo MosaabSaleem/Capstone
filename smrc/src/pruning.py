@@ -1,83 +1,92 @@
-"""Track A — feature selection (chi2/MI/L1), doc-freq filtering, weight pruning."""
+"""Track A: feature selection and magnitude weight pruning."""
 from __future__ import annotations
+
 import copy
+
 import numpy as np
 from scipy.sparse import csr_matrix
-from sklearn.feature_selection import (SelectFromModel, SelectKBest, chi2,
-                                       mutual_info_classif)
+from sklearn.feature_selection import SelectFromModel, SelectKBest, chi2, mutual_info_classif
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+
 from . import config
+from .baselines import classifier
 
 
-def _mutual_info_scorer(X, y, seed: int = None):
-    """MI over BINARISED term presence.
+# ---------------------------------------------------------------------------
+# Feature selection
+# ---------------------------------------------------------------------------
+def mutual_info_scores(X, y, seed: int = config.SEED):
+    """Mutual information between each term and the class label.
 
-    TF-IDF values are continuous, so discrete_features=True on the raw matrix is
-    a false assumption. discrete_features=False is unavailable because sklearn
-    rejects continuous features on a sparse matrix, and densifying 120k x 20k is
-    not feasible. Scoring term PRESENCE keeps the matrix sparse and makes the
-    discreteness assumption true, matching Yang and Pedersen (1997).
+    Scores are computed on term presence (does the term appear or not) rather
+    than on the TF-IDF weight. This is the classical formulation used in text
+    feature selection. It keeps the matrix sparse, and it means the
+    discrete_features=True setting is an accurate description of the input.
+    Scoring is done on a stratified subsample to keep the runtime reasonable.
     """
-    seed = config.SEED if seed is None else seed
-    Xb = (X > 0).astype(np.int8)
+    presence = (X > 0).astype(np.int8)
     n = config.MI_SUBSAMPLE
-    if n is not None and Xb.shape[0] > n:
-        Xb, _, y, _ = train_test_split(Xb, y, train_size=n, stratify=y, random_state=seed)
-    return mutual_info_classif(Xb, y, discrete_features=True, random_state=seed)
+    if n is not None and presence.shape[0] > n:
+        presence, _, y, _ = train_test_split(presence, y, train_size=n,
+                                             stratify=y, random_state=seed)
+    return mutual_info_classif(presence, y, discrete_features=True, random_state=seed)
 
 
-def make_feature_selector(method: str, keep_fraction: float, n_features: int,
-                          seed: int = None):
-    seed = config.SEED if seed is None else seed
-    k = max(1, int(round(keep_fraction * n_features)))
+def make_selector(method: str, keep_fraction: float, n_features: int, seed: int = config.SEED):
+    """Build a selector that keeps the top keep_fraction of the vocabulary."""
+    k = max(1, round(keep_fraction * n_features))
     if method == "chi2":
         return SelectKBest(chi2, k=k)
     if method == "mutual_info":
-        return SelectKBest(lambda X, y: _mutual_info_scorer(X, y, seed), k=k)
+        return SelectKBest(lambda X, y: mutual_info_scores(X, y, seed), k=k)
     if method == "l1":
-        base = LogisticRegression(penalty="l1", solver="liblinear", C=1.0,
-                                  random_state=seed)
-        return SelectFromModel(base, max_features=k, threshold=-np.inf)
+        lasso_like = LogisticRegression(penalty="l1", solver="liblinear", C=1.0, random_state=seed)
+        return SelectFromModel(lasso_like, max_features=k, threshold=-np.inf)
     raise ValueError(f"unknown selector: {method}")
 
 
-def prune_features(estimator_factory, X_train, y_train, X_test, method,
-                   keep_fraction, seed: int = None):
-    selector = make_feature_selector(method, keep_fraction, X_train.shape[1], seed)
-    Xtr = selector.fit_transform(X_train, y_train)
-    Xte = selector.transform(X_test)
-    model = estimator_factory()
-    model.fit(Xtr, y_train)
-    return model, csr_matrix(Xte), Xtr.shape[1]
+def prune_features(model_factory, X_train, y_train, X_test, method: str,
+                   keep_fraction: float, seed: int = config.SEED):
+    """Select features on the training split, then fit a fresh model on them.
+
+    The fresh model uses its default settings. Returns
+    (fitted_model, reduced_X_test, number_of_features_kept).
+    """
+    selector = make_selector(method, keep_fraction, X_train.shape[1], seed)
+    X_train_small = selector.fit_transform(X_train, y_train)
+    X_test_small = selector.transform(X_test)
+    model = model_factory()
+    model.fit(X_train_small, y_train)
+    return model, csr_matrix(X_test_small), X_train_small.shape[1]
 
 
-def prune_weights(coef: np.ndarray, sparsity: float) -> np.ndarray:
-    if sparsity <= 0:
-        return coef.copy()
-    flat = np.abs(coef).ravel()
-    n_zero = int(round(sparsity * flat.size))
+# ---------------------------------------------------------------------------
+# Weight pruning
+# ---------------------------------------------------------------------------
+def prune_weights(weights: np.ndarray, sparsity: float) -> np.ndarray:
+    """Zero the smallest-magnitude fraction of weights, using one global threshold."""
+    pruned = weights.copy()
+    n_zero = round(sparsity * weights.size)
     if n_zero <= 0:
-        return coef.copy()
-    if n_zero >= flat.size:
-        return np.zeros_like(coef)
-    threshold = np.partition(flat, n_zero)[n_zero]
-    pruned = coef.copy()
+        return pruned
+    if n_zero >= weights.size:
+        return np.zeros_like(weights)
+    threshold = np.partition(np.abs(weights).ravel(), n_zero)[n_zero]
     pruned[np.abs(pruned) < threshold] = 0.0
     return pruned
 
 
-def apply_pruned_weights(estimator, pruned_coef: np.ndarray):
+def with_weights(estimator, new_weights: np.ndarray):
+    """A copy of a fitted estimator with its main weight array replaced."""
     est = copy.deepcopy(estimator)
-    clf = est.named_steps["clf"] if hasattr(est, "named_steps") else est
-    if hasattr(clf, "coef_"):
-        clf.coef_ = pruned_coef
-    elif hasattr(clf, "feature_log_prob_"):
-        clf.feature_log_prob_ = pruned_coef
-    else:
-        raise AttributeError("estimator has no prunable weight attribute")
-    return est
+    clf = classifier(est)
+    for attr in ("coef_", "feature_log_prob_"):
+        if hasattr(clf, attr):
+            setattr(clf, attr, new_weights)
+            return est
+    raise AttributeError("estimator has no weight array to prune")
 
 
-def achieved_sparsity(coef: np.ndarray) -> float:
-    return round(float(np.mean(coef == 0.0)), 4)
+def achieved_sparsity(weights: np.ndarray) -> float:
+    return round(float(np.mean(weights == 0)), 4)

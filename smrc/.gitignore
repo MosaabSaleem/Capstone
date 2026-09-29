@@ -1,7 +1,12 @@
 __pycache__/
 *.py[cod]
 .venv/
-data/
-artifacts/
-*.pkl
+.ipynb_checkpoints/
 .DS_Store
+
+# downloaded data
+data/
+
+# quick-mode output is for checking only
+results_quick/
+figures_quick/

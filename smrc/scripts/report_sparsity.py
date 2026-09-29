@@ -1,23 +1,24 @@
-"""Point 1 — quantify TF-IDF sparsity and CSR-vs-dense RAM savings."""
-from __future__ import annotations
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+"""Measure how sparse the TF-IDF matrices are and how much memory CSR saves."""
+import _common  # noqa: F401  (must come first)
+
 from src import config, data
-from src.sparsity import analyse, pretty
+from src.sparsity import analyse, describe
 from src.utils import log_result, set_seed
 
 
-def main(prefer: str = "auto"):
+def main():
+    args = _common.parse_args(__doc__)
     set_seed(config.SEED)
-    ds = data.load(prefer=prefer)
-    Xtr, Xte, vec = ds.vectorise()
-    print("TRAIN feature matrix:"); rtr = analyse(Xtr); print(pretty(rtr))
-    print("\nTEST feature matrix:"); print(pretty(analyse(Xte)))
-    log_result({"model": "-", "track": "sparsity", "variant": "tfidf_train",
-                "n_features": Xtr.shape[1], **rtr.as_row()})
-    print(f"\nLogged -> {config.RESULTS_CSV}")
+    ds = data.load(args.data)
+    X_train, X_test, _ = ds.vectorise()
+
+    train = analyse(X_train)
+    print("Training matrix\n" + describe(train))
+    print("\nTest matrix\n" + describe(analyse(X_test)))
+
+    log_result({"model": "-", "track": "sparsity", "variant": "tfidf_train", **train.as_row()})
+    print(f"\nLogged to {config.RESULTS_CSV}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "auto")
+    main()

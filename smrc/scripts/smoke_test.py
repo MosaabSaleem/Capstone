@@ -1,64 +1,73 @@
-"""End-to-end smoke test on tiny synthetic data (no downloads)."""
-from __future__ import annotations
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+"""Check that every stage of the pipeline runs, using a tiny synthetic dataset.
+
+No download is needed and nothing is written to the results folders. If this
+passes, the real runs should work too.
+"""
+import _common  # noqa: F401  (must come first)
+
+import warnings
+
 from src import config, data
-from src.baselines import MODEL_FACTORIES, build_search, get_coef
-from src.metrics import full_evaluation, deployable_size_kb, model_size_kb
-from src.pruning import apply_pruned_weights, prune_features, prune_weights
-from src.quantisation import apply_quantised_weights, count_parameters
+from src.baselines import MODEL_FACTORIES, fit_tuned, get_weights
+from src.metrics import dense_size_kb, deployable_size_kb, evaluate
+from src.pruning import prune_features, prune_weights, with_weights
+from src.quantisation import count_parameters, quantise_model
 from src.sparsity import analyse
 from src.utils import set_seed
+
+EXPECTED_METRICS = ["accuracy", "macro_f1", "latency_ms", "peak_mem_mb", "rss_delta_mb",
+                    "model_size_dense_kb", "model_size_kb", "weight_density",
+                    "efficiency_index"]
+
+
+def check(step: str, n: int, total: int = 8) -> None:
+    print(f"[{n}/{total}] {step}")
 
 
 def main() -> int:
     set_seed(config.SEED)
-    print("[1/8] synthetic data + TF-IDF...")
-    ds = data.load(prefer="synthetic")
-    Xtr, Xte, _ = ds.vectorise(max_features=500, ngram_range=(1, 1), min_df=1)
 
-    print("[2/8] sparsity report...")
-    rep = analyse(Xtr)
-    assert rep.dense_bytes >= rep.sparse_bytes
+    check("synthetic data and TF-IDF", 1)
+    ds = data.load("synthetic")
+    X_train, X_test, _ = ds.vectorise(max_features=500, ngram_range=(1, 1), min_df=1)
 
-    print("[3/8] baseline with CV...")
-    s = build_search("logreg", seed=config.SEED); s.fit(Xtr, ds.y_train)
-    base = s.best_estimator_
-    m = full_evaluation(base, Xte, ds.y_test)
-    assert "efficiency_index" in m and "model_size_dense_kb" in m
+    check("sparsity measurement", 2)
+    report = analyse(X_train)
+    assert report.dense_mb >= report.sparse_mb
 
-    print("[4/8] feature pruning...")
-    mdl, Xte_red, n_kept = prune_features(
-        MODEL_FACTORIES["logreg"], Xtr, ds.y_train, Xte, "chi2", 0.5)
-    assert n_kept <= Xtr.shape[1]
+    check("tuned baseline and every metric", 3)
+    base, _ = fit_tuned("logreg", X_train, ds.y_train)
+    metrics = evaluate(base, X_test, ds.y_test)
+    missing = [m for m in EXPECTED_METRICS if m not in metrics]
+    assert not missing, f"missing metrics: {missing}"
 
-    print("[5/8] FIX: mutual_info runs without discrete-value warnings...")
-    import warnings
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        prune_features(MODEL_FACTORIES["logreg"], Xtr, ds.y_train, Xte, "mutual_info", 0.5)
-        bad = [x for x in w if "discrete" in str(x.message).lower()]
-    assert not bad, f"MI still warning: {bad}"
+    check("feature selection with all three selectors", 4)
+    for method in config.FEATURE_SELECTORS:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _, _, n_kept = prune_features(MODEL_FACTORIES["logreg"], X_train, ds.y_train,
+                                          X_test, method, 0.5)
+        noisy = [w for w in caught if "discrete" in str(w.message).lower()]
+        assert not noisy, f"{method} raised discrete-value warnings"
+        assert n_kept <= X_train.shape[1]
 
-    print("[6/8] FIX: pruned model reports a real size saving...")
-    pm = apply_pruned_weights(base, prune_weights(get_coef(base), 0.9))
-    dense, deploy = model_size_kb(pm), deployable_size_kb(pm)
-    assert deploy < dense, f"no saving: {dense} -> {deploy}"
-    print(f"      {dense}KB -> {deploy}KB ({dense/deploy:.1f}x)")
+    check("weight pruning shrinks the deployable size", 5)
+    pruned = with_weights(base, prune_weights(get_weights(base), 0.9))
+    assert deployable_size_kb(pruned) < dense_size_kb(pruned)
 
-    print("[7/8] quantisation, linear and NB...")
-    full_evaluation(apply_quantised_weights(base, 8), Xte, ds.y_test)
-    nb = build_search("naive_bayes", seed=config.SEED); nb.fit(Xtr, ds.y_train)
-    assert count_parameters(nb.best_estimator_) > 0
-    full_evaluation(apply_quantised_weights(nb.best_estimator_, 8), Xte, ds.y_test)
+    check("quantisation of a linear model", 6)
+    evaluate(quantise_model(base, 8), X_test, ds.y_test)
 
-    print("[8/8] multi-seed modules import...")
+    check("quantisation of Naive Bayes", 7)
+    nb, _ = fit_tuned("naive_bayes", X_train, ds.y_train)
+    assert count_parameters(nb) > 0
+    evaluate(quantise_model(nb, 4), X_test, ds.y_test)
+
+    check("multi-seed scripts import", 8)
     import importlib.util
     for name in ("run_multiseed", "summarise_multiseed"):
-        spec = importlib.util.spec_from_file_location(
-            name, Path(__file__).resolve().parent / f"{name}.py")
-        assert spec is not None
+        path = _common.ROOT / "scripts" / f"{name}.py"
+        assert importlib.util.spec_from_file_location(name, path) is not None
 
     print("\nSMOKE TEST PASSED")
     return 0
