@@ -1,9 +1,4 @@
-"""Track B — simulated quantisation for classical models (point 4).
-
-Linear models: quantise coef_ + intercept_.
-Naive Bayes:  quantise feature_log_prob_ + class_log_prior_.
-Fake-quant: fp32 -> low-bit int -> fp32, carrying the rounding error.
-"""
+"""Track B — simulated quantisation for classical models."""
 from __future__ import annotations
 import copy
 import numpy as np
@@ -49,12 +44,8 @@ def apply_quantised_weights(estimator, bits: int, scheme: str = "symmetric"):
 
 def count_parameters(estimator) -> int:
     clf = estimator.named_steps["clf"] if hasattr(estimator, "named_steps") else estimator
-    total = 0
-    for attr in QUANTISABLE_ATTRS:
-        arr = getattr(clf, attr, None)
-        if arr is not None:
-            total += int(np.asarray(arr).size)
-    return total
+    return sum(int(np.asarray(getattr(clf, a)).size)
+               for a in QUANTISABLE_ATTRS if getattr(clf, a, None) is not None)
 
 
 def theoretical_size_kb(n_params: int, bits: int) -> float:

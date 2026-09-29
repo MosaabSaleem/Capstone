@@ -13,9 +13,7 @@ _NONWORD = re.compile(r"[^a-z0-9\s]")
 
 
 def clean_text(text: str) -> str:
-    text = text.lower()
-    text = _NONWORD.sub(" ", text)
-    return _WS.sub(" ", text).strip()
+    return _WS.sub(" ", _NONWORD.sub(" ", text.lower())).strip()
 
 
 @dataclass
@@ -109,11 +107,3 @@ def load(prefer: str = "auto") -> Dataset:
             if prefer == "hf":
                 raise
     return _load_from_csv()
-
-
-if __name__ == "__main__":
-    from .sparsity import analyse, pretty
-    ds = load()
-    Xtr, Xte, vec = ds.vectorise()
-    print(f"TF-IDF: train={Xtr.shape} test={Xte.shape}")
-    print(pretty(analyse(Xtr)))

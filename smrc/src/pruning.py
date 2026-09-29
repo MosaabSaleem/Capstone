@@ -10,45 +10,41 @@ from sklearn.model_selection import train_test_split
 from . import config
 
 
-def _mutual_info_scorer(X, y):
-    """Mutual information over BINARISED term presence.
+def _mutual_info_scorer(X, y, seed: int = None):
+    """MI over BINARISED term presence.
 
-    FIX: the previous call passed raw continuous TF-IDF values while asserting
-    discrete_features=True, so sklearn emitted ~20k warnings and the scores were
-    computed under a false assumption. The obvious repair, discrete_features
-    =False, is not available here because sklearn raises "Sparse matrix `X`
-    can't have continuous features", and densifying a 120k x 20k matrix is not
-    feasible.
-
-    The correct and standard repair is to binarise: score mutual information on
-    term PRESENCE rather than on the TF-IDF weight. This is exactly the
-    formulation used in the classic text feature-selection literature
-    (Yang and Pedersen, 1997), it keeps the matrix sparse, it is fast, and
-    discrete_features=True is then a true statement about the input.
+    TF-IDF values are continuous, so discrete_features=True on the raw matrix is
+    a false assumption. discrete_features=False is unavailable because sklearn
+    rejects continuous features on a sparse matrix, and densifying 120k x 20k is
+    not feasible. Scoring term PRESENCE keeps the matrix sparse and makes the
+    discreteness assumption true, matching Yang and Pedersen (1997).
     """
-    Xb = (X > 0).astype(np.int8)          # term presence, still sparse
+    seed = config.SEED if seed is None else seed
+    Xb = (X > 0).astype(np.int8)
     n = config.MI_SUBSAMPLE
     if n is not None and Xb.shape[0] > n:
-        Xb, _, y, _ = train_test_split(
-            Xb, y, train_size=n, stratify=y, random_state=config.SEED)
-    return mutual_info_classif(
-        Xb, y, discrete_features=True, random_state=config.SEED)
+        Xb, _, y, _ = train_test_split(Xb, y, train_size=n, stratify=y, random_state=seed)
+    return mutual_info_classif(Xb, y, discrete_features=True, random_state=seed)
 
 
-def make_feature_selector(method: str, keep_fraction: float, n_features: int):
+def make_feature_selector(method: str, keep_fraction: float, n_features: int,
+                          seed: int = None):
+    seed = config.SEED if seed is None else seed
     k = max(1, int(round(keep_fraction * n_features)))
     if method == "chi2":
         return SelectKBest(chi2, k=k)
     if method == "mutual_info":
-        return SelectKBest(_mutual_info_scorer, k=k)
+        return SelectKBest(lambda X, y: _mutual_info_scorer(X, y, seed), k=k)
     if method == "l1":
-        base = LogisticRegression(penalty="l1", solver="liblinear", C=1.0)
+        base = LogisticRegression(penalty="l1", solver="liblinear", C=1.0,
+                                  random_state=seed)
         return SelectFromModel(base, max_features=k, threshold=-np.inf)
     raise ValueError(f"unknown selector: {method}")
 
 
-def prune_features(estimator_factory, X_train, y_train, X_test, method, keep_fraction):
-    selector = make_feature_selector(method, keep_fraction, X_train.shape[1])
+def prune_features(estimator_factory, X_train, y_train, X_test, method,
+                   keep_fraction, seed: int = None):
+    selector = make_feature_selector(method, keep_fraction, X_train.shape[1], seed)
     Xtr = selector.fit_transform(X_train, y_train)
     Xte = selector.transform(X_test)
     model = estimator_factory()

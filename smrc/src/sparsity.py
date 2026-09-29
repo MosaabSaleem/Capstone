@@ -38,5 +38,4 @@ def pretty(r: SparsityReport) -> str:
     return (f"shape={r.n_rows}x{r.n_cols}  sparsity={r.sparsity:.4%}  nnz={r.nnz:,}\n"
             f"  CSR footprint : {r.sparse_mb:,.3f} MB\n"
             f"  dense equiv.  : {r.dense_mb:,.3f} MB\n"
-            f"  RAM saving    : {r.savings_ratio:,.1f}x "
-            f"({r.savings_bytes / (1024 ** 2):,.1f} MB saved)")
+            f"  RAM saving    : {r.savings_ratio:,.1f}x")
