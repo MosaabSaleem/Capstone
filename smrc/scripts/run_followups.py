@@ -14,14 +14,17 @@
             first, so the first prediction pays the full cache-miss cost.
 
 Results are written to results/followups.csv and never touch results.csv.
+Running a stage replaces any earlier rows for that stage, so re-runs do not
+leave duplicates behind.
 
     python scripts/run_followups.py              all three stages
-    python scripts/run_followups.py disk         one stage only
+    python scripts/run_followups.py nbquant      one stage only
     python scripts/run_followups.py --quick      reduced run for checking
 """
 import _common  # noqa: F401  (must come first)
 
 import copy
+import csv
 import gc
 import os
 import pickle
@@ -48,8 +51,21 @@ WARM_TRIALS = 50 if config.QUICK else 500
 
 def _log(row):
     log_result(row, OUT)
-    shown = {k: v for k, v in row.items() if k not in ("seed",)}
-    print("  " + " | ".join(f"{k}={v}" for k, v in shown.items()))
+    print("  " + " | ".join(f"{k}={v}" for k, v in row.items()))
+
+
+def drop_stage(stage: str) -> None:
+    """Remove earlier rows for a stage so a re-run replaces them."""
+    if not OUT.exists():
+        return
+    with OUT.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fields = reader.fieldnames or []
+        kept = [row for row in reader if row.get("stage") != stage]
+    with OUT.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(kept)
 
 
 # ---------------------------------------------------------------------------
@@ -62,11 +78,10 @@ def save_sparse(model, path: Path) -> None:
     arrays needed to rebuild the model.
     """
     clf = classifier(model)
-    buffers = {"intercept": clf.intercept_, "classes": clf.classes_}
     weights = sparse.csr_matrix(clf.coef_)
-    buffers.update(data=weights.data, indices=weights.indices,
-                   indptr=weights.indptr, shape=np.array(weights.shape))
-    np.savez_compressed(path, **buffers)
+    np.savez_compressed(path, intercept=clf.intercept_, classes=clf.classes_,
+                        data=weights.data, indices=weights.indices,
+                        indptr=weights.indptr, shape=np.array(weights.shape))
 
 
 def load_sparse(path: Path, template):
@@ -90,42 +105,50 @@ def disk(ds, X_train, X_test):
             for s in SPARSITIES:
                 model = with_weights(base, prune_weights(weights, s))
                 expected = model.predict(X_test)
-
                 formats = {
-                    "joblib": (lambda p: joblib.dump(model, p), lambda p: joblib.load(p), ".joblib"),
+                    "joblib": (lambda p: joblib.dump(model, p), joblib.load, ".joblib"),
                     "joblib_compressed": (lambda p: joblib.dump(model, p, compress=3),
-                                          lambda p: joblib.load(p), ".joblib"),
+                                          joblib.load, ".joblib"),
                     "sparse_npz": (lambda p: save_sparse(model, p),
                                    lambda p: load_sparse(p, base), ".npz"),
                 }
                 for name, (save, load, ext) in formats.items():
                     path = tmp / f"{key}_{s}_{name}{ext}"
                     save(path)
-                    size_kb = round(os.path.getsize(path) / 1024, 2)
-                    identical = bool(np.array_equal(load(path).predict(X_test), expected))
                     _log({"stage": "disk", "model": key, "sparsity": s, "format": name,
-                          "file_kb": size_kb, "reload_identical": identical})
+                          "file_kb": round(os.path.getsize(path) / 1024, 2),
+                          "reload_identical": bool(np.array_equal(load(path).predict(X_test),
+                                                                  expected))})
 
 
 # ---------------------------------------------------------------------------
 # Stage 2: quantising the Naive Bayes log-probability tables
 # ---------------------------------------------------------------------------
+# Every scheme returns its input unchanged when all the values are identical.
+# AG News is perfectly balanced, so the four class log-priors are all
+# log(0.25). Without that guard the asymmetric grid has zero width, divides
+# zero by zero and turns the priors into NaN.
+
 def q_symmetric(v, bits):
     """One scale for the whole table, grid centred on zero."""
+    top = np.max(np.abs(v))
+    if top == 0:
+        return v.copy()
     q = 2 ** (bits - 1) - 1
-    scale = np.max(np.abs(v)) / q
+    scale = top / q
     return np.clip(np.round(v / scale), -q - 1, q) * scale
 
 
 def q_asymmetric(v, bits):
-    """One scale, grid stretched across the actual min and max.
+    """One scale, grid stretched across the actual minimum and maximum.
 
-    Log-probabilities are all negative, so a symmetric grid wastes the whole
+    Log-probabilities are all negative, so a symmetric grid wastes its whole
     positive half. This uses every level on the range the values occupy.
     """
     lo, hi = v.min(), v.max()
-    levels = 2 ** bits - 1
-    scale = (hi - lo) / levels
+    if hi == lo:
+        return v.copy()
+    scale = (hi - lo) / (2 ** bits - 1)
     return lo + np.round((v - lo) / scale) * scale
 
 
@@ -138,10 +161,13 @@ def q_quantile(v, bits):
     """Non-linear binning. Levels are placed at quantiles of the values, so
     densely populated regions of the log-probability range get finer steps."""
     flat = v.ravel()
+    if flat.min() == flat.max():
+        return v.copy()
     n = 2 ** bits
     edges = np.quantile(flat, np.linspace(0, 1, n + 1))
     idx = np.clip(np.searchsorted(edges, flat, side="right") - 1, 0, n - 1)
-    centres = np.array([flat[idx == i].mean() if np.any(idx == i) else edges[i] for i in range(n)])
+    centres = np.array([flat[idx == i].mean() if np.any(idx == i) else edges[i]
+                        for i in range(n)])
     return centres[idx].reshape(v.shape)
 
 
@@ -154,11 +180,11 @@ def nbquant(ds, X_train, X_test):
     from sklearn.metrics import f1_score
     base, _ = fit_tuned("naive_bayes", X_train, ds.y_train)
     reference = base.predict(X_test)
-    ref_f1 = round(f1_score(ds.y_test, reference, average="macro"), 4)
     table = classifier(base).feature_log_prob_
     prior = classifier(base).class_log_prior_
     _log({"stage": "nbquant", "model": "naive_bayes", "bits": 32, "scheme": "none",
-          "macro_f1": ref_f1, "agreement": 1.0, "max_abs_error": 0.0,
+          "macro_f1": round(f1_score(ds.y_test, reference, average="macro"), 4),
+          "agreement": 1.0, "max_abs_error": 0.0, "mean_abs_error": 0.0,
           "log_range": f"{table.min():.2f} to {table.max():.2f}"})
 
     for bits in NB_BITS:
@@ -167,11 +193,16 @@ def nbquant(ds, X_train, X_test):
             clf = classifier(model)
             clf.feature_log_prob_ = fn(table, bits)
             clf.class_log_prior_ = fn(prior.reshape(1, -1), bits).ravel()
+            if not (np.all(np.isfinite(clf.feature_log_prob_))
+                    and np.all(np.isfinite(clf.class_log_prior_))):
+                raise ValueError(f"{name} at {bits} bits produced non-finite values")
             pred = model.predict(X_test)
+            error = np.abs(clf.feature_log_prob_ - table)
             _log({"stage": "nbquant", "model": "naive_bayes", "bits": bits, "scheme": name,
                   "macro_f1": round(f1_score(ds.y_test, pred, average="macro"), 4),
                   "agreement": round(float(np.mean(pred == reference)), 4),
-                  "max_abs_error": round(float(np.max(np.abs(clf.feature_log_prob_ - table))), 4)})
+                  "max_abs_error": round(float(error.max()), 4),
+                  "mean_abs_error": round(float(error.mean()), 4)})
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +214,12 @@ _EVICT = np.ones(64 * 1024 * 1024 // 8)  # 64 MB, larger than any CPU cache
 def evict_caches():
     """Touch a buffer larger than the CPU caches so later reads start cold."""
     _EVICT.sum()
+
+
+def _time(fn) -> float:
+    start = time.perf_counter()
+    fn()
+    return time.perf_counter() - start
 
 
 def latency(ds, X_train, X_test):
@@ -221,12 +258,6 @@ def latency(ds, X_train, X_test):
               "single_over_batch": round(statistics.median(warm) / batch_per_doc, 1)})
 
 
-def _time(fn) -> float:
-    start = time.perf_counter()
-    fn()
-    return time.perf_counter() - start
-
-
 STAGES = {"disk": disk, "nbquant": nbquant, "latency": latency}
 
 
@@ -236,6 +267,7 @@ def main():
     ds = data.load(args.data)
     X_train, X_test, _ = ds.vectorise()
     for name in (list(STAGES) if args.stage == "all" else [args.stage]):
+        drop_stage(name)
         STAGES[name](ds, X_train, X_test)
     print(f"\nLogged to {OUT}")
 
