@@ -1,8 +1,0 @@
-"""Draw every report figure from results.csv."""
-import _common  # noqa: F401  (must come first)
-
-from src.plots import main
-
-if __name__ == "__main__":
-    _common.parse_args(__doc__)
-    main()
