@@ -11,15 +11,7 @@ from sklearn.model_selection import train_test_split
 from . import config
 from .models import classifier
 
-# ---------------------------------------------------------------------------
 # Feature selection
-# ---------------------------------------------------------------------------
-# Each selector produces one score per term. Scores do not depend on how many
-# terms are kept, so they are computed once and every vocabulary budget simply
-# keeps the top-scoring terms. This gives the same selection as refitting the
-# selector at every budget, at a fraction of the cost.
-
-
 def selector_scores(method: str, X, y, seed: int = config.SEED) -> np.ndarray:
     """One importance score per term. Higher means more useful."""
     if method == "chi2":
@@ -48,19 +40,16 @@ def selector_scores(method: str, X, y, seed: int = config.SEED) -> np.ndarray:
 
 
 def top_terms(scores: np.ndarray, keep_fraction: float) -> np.ndarray:
-    """Column indices of the top keep_fraction of terms, in their original order."""
     k = max(1, round(keep_fraction * scores.size))
     if k >= scores.size:
         return np.arange(scores.size)
-    order = np.argsort(-scores, kind="mergesort")  # stable, so ties are deterministic
+    order = np.argsort(-scores, kind="mergesort")
     return np.sort(order[:k])
 
 
-# ---------------------------------------------------------------------------
 # Weight pruning
-# ---------------------------------------------------------------------------
+# Zero the smallest-magnitude fraction of weights, using one global threshold.
 def prune_weights(weights: np.ndarray, sparsity: float) -> np.ndarray:
-    """Zero the smallest-magnitude fraction of weights, using one global threshold."""
     pruned = weights.copy()
     n_zero = round(sparsity * weights.size)
     if n_zero <= 0:
@@ -76,18 +65,10 @@ def achieved_sparsity(weights: np.ndarray) -> float:
     return round(float(np.mean(weights == 0)), 4)
 
 
-# ---------------------------------------------------------------------------
 # Quantisation
-# ---------------------------------------------------------------------------
-# Simulated ("fake") quantisation: values are rounded onto a low-bit grid and
-# converted back to floating point. Prediction still runs in float arithmetic
-# but carries exactly the rounding error a real low-precision model would have.
-# Every grid returns its input unchanged when all values are identical. AG News
-# is perfectly balanced, so the four class log-priors are all log(0.25).
-
 PARAMETER_ARRAYS = ("coef_", "intercept_", "feature_log_prob_", "class_log_prior_")
 
-
+# The four following methods are schemes. symmetric, asymmetric, per_class, quantile
 def q_symmetric(v: np.ndarray, bits: int) -> np.ndarray:
     """One scale for the whole array, grid centred on zero."""
     top = np.max(np.abs(v))
@@ -130,7 +111,7 @@ def q_quantile(v: np.ndarray, bits: int) -> np.ndarray:
 GRIDS = {"symmetric": q_symmetric, "asymmetric": q_asymmetric,
          "per_class": q_per_class, "quantile": q_quantile}
 
-
+# Quantise a fitted model by rounding its parameter arrays to a low-bit representation.
 def quantise_model(estimator, bits: int, scheme: str = config.QUANT_SCHEME):
     """A copy of a fitted model with every learned parameter array quantised."""
     est = copy.deepcopy(estimator)
@@ -151,13 +132,12 @@ def quantise_model(estimator, bits: int, scheme: str = config.QUANT_SCHEME):
         raise AttributeError("estimator has no parameter arrays to quantise")
     return est
 
-
+# return the number of paramters in a fitted estimator
 def count_parameters(estimator) -> int:
     clf = classifier(estimator)
     return int(sum(np.asarray(getattr(clf, a)).size
                    for a in PARAMETER_ARRAYS if getattr(clf, a, None) is not None))
 
-
+# Size of the parameters if stored at the given bit-width.
 def packed_size_kb(n_params: int, bits: int) -> float:
-    """Size of the parameters if stored at the given bit-width."""
     return round(n_params * bits / 8 / 1024, 3)

@@ -1,0 +1,16 @@
+seed,model,track,variant,setting,min_df,max_df,n_features,best_params,accuracy,macro_f1,latency_ms,peak_mem_mb,rss_delta_mb,model_size_dense_kb,model_size_kb,weight_density,efficiency_index
+42,naive_bayes,A,docfreq_filter,min_df 2 max_df 1.0,2,1.0,20000,{'alpha': 0.1},0.8942,0.8939,0.000536,0.627,0.0,1250.75,1250.75,1.0,1365.8359
+42,logreg,A,docfreq_filter,min_df 2 max_df 1.0,2,1.0,20000,{'C': 1.0},0.918,0.9179,0.000897,0.627,0.0,625.84,625.84,1.0,1674.5048
+42,linear_svm,A,docfreq_filter,min_df 2 max_df 1.0,2,1.0,20000,{'C': 0.1},0.9179,0.9177,0.000669,0.049,0.0,625.73,625.73,1.0,2245.3373
+42,naive_bayes,A,docfreq_filter,min_df 5 max_df 1.0,5,1.0,20000,{'alpha': 0.1},0.8939,0.8936,0.000502,0.627,0.0,1250.75,1250.75,1.0,1457.8532
+42,logreg,A,docfreq_filter,min_df 5 max_df 1.0,5,1.0,20000,{'C': 1.0},0.9164,0.9163,0.000797,0.627,0.0,625.84,625.84,1.0,1881.3208
+42,linear_svm,A,docfreq_filter,min_df 5 max_df 1.0,5,1.0,20000,{'C': 0.1},0.9175,0.9173,0.000621,0.049,0.0,625.73,625.73,1.0,2417.8355
+42,naive_bayes,A,docfreq_filter,min_df 10 max_df 0.9,10,0.9,20000,{'alpha': 0.1},0.8938,0.8935,0.000462,0.627,0.0,1250.75,1250.75,1.0,1583.8968
+42,logreg,A,docfreq_filter,min_df 10 max_df 0.9,10,0.9,20000,{'C': 1.0},0.9176,0.9175,0.000851,0.627,0.0,625.84,625.84,1.0,1764.2494
+42,linear_svm,A,docfreq_filter,min_df 10 max_df 0.9,10,0.9,20000,{'C': 0.1},0.9178,0.9176,0.000719,0.049,0.0,625.73,625.73,1.0,2088.9668
+42,naive_bayes,A,docfreq_filter,min_df 20 max_df 0.8,20,0.8,20000,{'alpha': 0.1},0.8943,0.894,0.000478,0.627,0.0,1250.75,1250.75,1.0,1531.7358
+42,logreg,A,docfreq_filter,min_df 20 max_df 0.8,20,0.8,20000,{'C': 1.0},0.9171,0.917,0.000773,0.627,0.0,625.84,625.84,1.0,1941.2134
+42,linear_svm,A,docfreq_filter,min_df 20 max_df 0.8,20,0.8,20000,{'C': 0.1},0.9182,0.9179,0.000638,0.049,0.0,625.73,625.73,1.0,2355.206
+42,naive_bayes,A,docfreq_filter,min_df 50 max_df 0.7,50,0.7,15600,{'alpha': 0.1},0.8892,0.8888,0.000432,0.493,0.0,975.75,975.75,1.0,2160.1111
+42,logreg,A,docfreq_filter,min_df 50 max_df 0.7,50,0.7,15600,{'C': 1.0},0.9129,0.9128,0.000725,0.493,0.0,488.34,488.34,1.0,2640.3546
+42,linear_svm,A,docfreq_filter,min_df 50 max_df 0.7,50,0.7,15600,{'C': 0.1},0.9149,0.9146,0.000619,0.049,0.0,488.23,488.23,1.0,3099.972

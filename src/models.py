@@ -19,13 +19,8 @@ FACTORIES = {
 }
 WEIGHT_ATTRS = ("coef_", "feature_log_prob_")
 
-
+# Grid search with stratified k-fold CV on the training data only. The best configuration is refitted on all of the training data.
 def tune(key: str, X, y, seed: int = config.SEED):
-    """Grid search with stratified k-fold CV on the training data only.
-
-    The best configuration is refitted on all of the training data.
-    Returns (fitted_pipeline, best_params).
-    """
     search = GridSearchCV(
         Pipeline([("clf", FACTORIES[key]())]),
         param_grid=config.PARAM_GRIDS[key],
@@ -38,23 +33,20 @@ def tune(key: str, X, y, seed: int = config.SEED):
     params = {k.replace("clf__", ""): v for k, v in search.best_params_.items()}
     return search.best_estimator_, params
 
-
+# Return the classifier inside a pipeline, or the estimator itself.
 def classifier(estimator):
-    """The classifier inside a pipeline, or the estimator itself."""
     return estimator.named_steps["clf"] if hasattr(estimator, "named_steps") else estimator
 
-
+# Get the main weight array of a fitted estimator. coef_ for the linear models, feature_log_prob_ for Naive Bayes
 def get_weights(estimator) -> np.ndarray:
-    """coef_ for the linear models, feature_log_prob_ for Naive Bayes."""
     clf = classifier(estimator)
     for attr in WEIGHT_ATTRS:
         if hasattr(clf, attr):
             return getattr(clf, attr)
     raise AttributeError("estimator has no weight array")
 
-
+# Copy of a fitted estimator with its main weight array replaced
 def with_weights(estimator, new_weights: np.ndarray):
-    """A copy of a fitted estimator with its main weight array replaced."""
     est = copy.deepcopy(estimator)
     clf = classifier(est)
     for attr in WEIGHT_ATTRS:

@@ -1,0 +1,17 @@
+check,value,of,detail,words,n_docs,f1_baseline,f1_weight_prune_0_95,f1_l1_0_1,finite,share_zeroed
+empty_docs_full_vocab,0.0,7600.0,,,,,,,,
+empty_docs_after_l1_0.1,0.0,7600.0,,,,,,,,
+unknown_words_prediction_svm,0.0,,"all-zero input, decided by the intercept alone",,,,,,,
+unknown_words_prediction_nb,0.0,,"all-zero input, decided by the class priors alone",,,,,,,
+length_quartile_1,,,,14-33,1849.0,0.8883,0.8678,0.8718,,
+length_quartile_2,,,,33-39,1928.0,0.922,0.9123,0.9193,,
+length_quartile_3,,,,39-44,1662.0,0.9303,0.9264,0.9271,,
+length_quartile_4,,,,44-145,2161.0,0.9272,0.921,0.9251,,
+quantiser_symmetric_constant,,,,,,,,,True,0.0
+quantiser_asymmetric_constant,,,,,,,,,True,0.0
+quantiser_symmetric_all_zero,,,,,,,,,True,0.0
+quantiser_asymmetric_all_zero,,,,,,,,,True,0.0
+quantiser_symmetric_single_outlier,,,,,,,,,True,0.999
+quantiser_asymmetric_single_outlier,,,,,,,,,True,0.0
+quantiser_symmetric_contains_neg_inf,,,,,,,,,False,0.0
+quantiser_asymmetric_contains_neg_inf,,,,,,,,,False,0.0

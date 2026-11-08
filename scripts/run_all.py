@@ -1,13 +1,13 @@
 """Run every experiment in the project and produce every table and figure.
 
-    python scripts/run_all.py                    full run, about two hours on a CPU
-    python scripts/run_all.py --quick            reduced run, for checking the pipeline
+    python scripts/run_all.py                    full run
+    python scripts/run_all.py --quick            quick run
     python scripts/run_all.py --from latency     resume from a stage after an interruption
     python scripts/run_all.py --only analysis    re-run selected stages (comma separated)
 
-A full run (no --from or --only) clears the results and figures folders first,
-so every number comes from the same run. Each stage saves its CSV as soon as it
-finishes, so an interrupted run keeps all completed stages.
+This is a full run, 
+it clears the results and figures folders first so every number comes from the same run. 
+Each stage saves its CSV as soon as it finishes, so an interrupted run keeps all completed stages.
 
 Stages, in order:
   sparsity, baselines, features, docfreq, weights, quant, nbgrids, combined,
@@ -32,7 +32,7 @@ from src.utils import set_seed  # noqa: E402
 
 ORDER = [*STAGES, "analysis"]
 
-
+# Parse command line arguments
 def parse():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--quick", action="store_true", help="small sweeps on a 20k training subsample")
@@ -41,14 +41,14 @@ def parse():
     p.add_argument("--from", dest="start", choices=ORDER, help="resume from this stage")
     return p.parse_args()
 
-
+# Clear the results and figures folders
 def clear_outputs():
     for folder, pattern in ((config.RESULTS_DIR, "*.csv"), (config.RESULTS_DIR, "*.json"),
                             (config.RESULTS_DIR, "*.txt"), (config.FIGURES_DIR, "*.png")):
         for f in folder.glob(pattern):
             f.unlink()
 
-
+# Main function to run the pipeline
 def main():
     args = parse()
     if args.only:

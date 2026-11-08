@@ -1,4 +1,4 @@
-"""Run the whole pipeline on a tiny synthetic dataset and check the output.
+"""Run the whole pipeline on a tiny synthetic dataset to check the code works.
 
 No download is needed and nothing is written to the real results folders.
 Takes about a minute. If this passes, a full run should work too.
@@ -24,7 +24,7 @@ EXPECTED_FIGURES = ["trackA_feature_pruning", "trackA_weight_sparsity",
                     "pareto_accuracy_vs_size", "efficiency_index_top", "efficiency_final_top",
                     "end_to_end_size", "weight_lorenz"]
 
-
+# Main function to run the smoke test
 def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         results, figures = Path(tmp) / "results", Path(tmp) / "figures"

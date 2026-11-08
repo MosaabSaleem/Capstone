@@ -1,5 +1,4 @@
-"""Shared state for one pipeline run.
-
+"""
 Loading data, vectorising it, tuning baselines and scoring features are the
 expensive steps, and several stages need the same results. The Context does
 each of them once and hands the result to every stage that asks.
@@ -20,13 +19,13 @@ class Context:
     def __init__(self, source: str = "auto"):
         self.source = source
         self._loaded = False
-        self._baselines = {}       # (model, seed) -> (fitted, params)
-        self._scores = {}          # (selector, seed) -> scores
-        self._feature_models = {}  # (model, selector, keep, seed) -> (fitted, params, columns)
+        self._baselines = {} 
+        self._scores = {} 
+        self._feature_models = {} 
         self.rows = defaultdict(list)
         self.timings = {}
 
-    # ---------------------------------------------------------------- data
+    # data loading and vectorisation are expensive, so we do them once and cache the results
     def _load(self):
         if self._loaded:
             return
@@ -45,7 +44,7 @@ class Context:
             return self.__dict__[name]
         raise AttributeError(name)
 
-    # -------------------------------------------------------------- models
+    # baselines and feature scores are done once per seed and cached for later use
     def baseline(self, key: str, seed: int = config.SEED):
         if (key, seed) not in self._baselines:
             self._baselines[(key, seed)] = tune(key, self.X_train, self.y_train, seed)
@@ -63,7 +62,7 @@ class Context:
         return top_terms(self.scores(method, seed), keep)
 
     def feature_model(self, key: str, method: str, keep: float, seed: int = config.SEED):
-        """A model tuned on the top keep fraction of terms. Returns (fitted, params, columns)."""
+        #A model tuned on the top keep fraction of terms. Returns (fitted, params, columns).
         cache_key = (key, method, keep, seed)
         if cache_key not in self._feature_models:
             cols = self.kept_columns(method, keep, seed)
@@ -74,7 +73,7 @@ class Context:
             self._feature_models[cache_key] = (fitted, params, cols)
         return self._feature_models[cache_key]
 
-    # ------------------------------------------------------------- results
+    # results tables are built up in memory and saved to disk at the end of each stage
     def add(self, table: str, row: dict, show: bool = True):
         self.rows[table].append(row)
         if show:
@@ -87,7 +86,7 @@ class Context:
         pd.DataFrame(self.rows[table]).to_csv(path, index=False)
         print(f"  -> {path.name} ({len(self.rows[table])} rows)")
 
-
+# Utility function to read a saved results table, or None if it does not exist.
 def read_table(table: str):
     """Read a saved results table, or None if it does not exist."""
     path = config.RESULTS_DIR / f"{table}.csv"

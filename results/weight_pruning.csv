@@ -1,0 +1,15 @@
+seed,model,track,variant,setting,weight_sparsity,achieved_sparsity,n_features,accuracy,macro_f1,latency_ms,peak_mem_mb,rss_delta_mb,model_size_dense_kb,model_size_kb,weight_density,efficiency_index
+42,logreg,A,weight_prune,sparsity 0,0.0,0.0,20000,0.918,0.9179,0.000481,0.627,0.0,625.84,625.84,1.0,3122.7221
+42,logreg,A,weight_prune,sparsity 0.5,0.5,0.5,20000,0.9176,0.9175,0.000499,0.627,0.0,625.84,625.84,0.5,3008.7675
+42,logreg,A,weight_prune,sparsity 0.7,0.7,0.7,20000,0.9161,0.9159,0.00049,0.627,0.0,625.84,282.28,0.3,6782.1246
+42,logreg,A,weight_prune,sparsity 0.8,0.8,0.8,20000,0.9134,0.9132,0.000472,0.627,0.0,625.84,188.52,0.2,10511.4012
+42,logreg,A,weight_prune,sparsity 0.9,0.9,0.9,20000,0.9086,0.9084,0.000474,0.627,0.0,625.84,94.77,0.1,20712.0242
+42,logreg,A,weight_prune,sparsity 0.95,0.95,0.95,20000,0.9039,0.9038,0.000484,0.627,0.0,625.84,47.89,0.05,39932.7517
+42,logreg,A,weight_prune,sparsity 0.99,0.99,0.99,20000,0.8579,0.8583,0.000472,0.627,0.0,625.84,10.39,0.01,179134.0378
+42,linear_svm,A,weight_prune,sparsity 0,0.0,0.0,20000,0.9179,0.9177,0.000488,0.627,0.0,625.73,625.73,1.0,3078.1348
+42,linear_svm,A,weight_prune,sparsity 0.5,0.5,0.5,20000,0.9178,0.9176,0.000471,0.627,0.0,625.73,625.73,0.5,3188.8875
+42,linear_svm,A,weight_prune,sparsity 0.7,0.7,0.7,20000,0.9178,0.9176,0.000501,0.627,0.0,625.73,282.2,0.3,6647.4091
+42,linear_svm,A,weight_prune,sparsity 0.8,0.8,0.8,20000,0.9139,0.9137,0.000484,0.627,0.0,625.73,188.44,0.2,10260.754
+42,linear_svm,A,weight_prune,sparsity 0.9,0.9,0.9,20000,0.9121,0.9119,0.000485,0.627,0.0,625.73,94.69,0.1,20337.4106
+42,linear_svm,A,weight_prune,sparsity 0.95,0.95,0.95,20000,0.908,0.9078,0.000509,0.627,0.0,625.73,47.81,0.05,38207.4819
+42,linear_svm,A,weight_prune,sparsity 0.99,0.99,0.99,20000,0.8672,0.8669,0.000485,0.627,0.0,625.73,10.31,0.01,177589.7449

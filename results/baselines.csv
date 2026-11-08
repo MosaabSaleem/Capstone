@@ -1,0 +1,4 @@
+seed,model,track,variant,setting,best_params,n_features,accuracy,macro_f1,latency_ms,peak_mem_mb,rss_delta_mb,model_size_dense_kb,model_size_kb,weight_density,efficiency_index
+42,naive_bayes,baseline,tuned,tuned,{'alpha': 0.1},20000,0.8942,0.8939,0.000562,0.627,0.0,1250.75,1250.75,1.0,1302.6478
+42,logreg,baseline,tuned,tuned,{'C': 1.0},20000,0.918,0.9179,0.0009,0.627,0.0,625.84,625.84,1.0,1668.9231
+42,linear_svm,baseline,tuned,tuned,{'C': 0.1},20000,0.9179,0.9177,0.000677,0.049,0.0,625.73,625.73,1.0,2218.8045

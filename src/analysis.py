@@ -32,9 +32,7 @@ def _save_fig(fig, name):
     print(f"  wrote figures/{name}")
 
 
-# ---------------------------------------------------------------------------
 # Tables
-# ---------------------------------------------------------------------------
 def all_configs() -> pd.DataFrame:
     frames = [t for t in (read_table(n) for n in MAIN_TABLES) if t is not None]
     if not frames:
@@ -43,7 +41,7 @@ def all_configs() -> pd.DataFrame:
     df.to_csv(config.RESULTS_DIR / "all_configs.csv", index=False)
     return df
 
-
+# efficiency index
 def efficiency_tables(df: pd.DataFrame) -> pd.DataFrame:
     base = df[(df["model"] == "logreg") & (df["variant"] == "tuned")].iloc[0]
     out = df[["model", "track", "variant", "setting", "macro_f1", "model_size_kb",
@@ -70,7 +68,7 @@ def efficiency_tables(df: pd.DataFrame) -> pd.DataFrame:
         print(f"    penalty {p:g}: " + "; ".join(f"{r.model} {r.setting}" for r in top.itertuples()))
     return out
 
-
+# Pareto frontier calculates best macro-F1 for a given deployable size
 def pareto(df: pd.DataFrame) -> pd.DataFrame:
     ordered = df.dropna(subset=["macro_f1", "model_size_kb"]).sort_values(
         ["macro_f1", "model_size_kb"], ascending=[False, True])
@@ -85,7 +83,7 @@ def pareto(df: pd.DataFrame) -> pd.DataFrame:
     print(front[["model", "variant", "setting", "macro_f1", "model_size_kb"]].to_string(index=False))
     return front
 
-
+# Multi-seed summary
 def multiseed_summary():
     ms = read_table("multiseed")
     if ms is None:
@@ -118,9 +116,8 @@ def multiseed_summary():
     print(pairs[pairs["model"] == "all"].to_string(index=False))
 
 
-# ---------------------------------------------------------------------------
 # Figures
-# ---------------------------------------------------------------------------
+# The figures are produced from the CSVs, so they can be re-run at any time without re-running the experiments.
 def figures(df: pd.DataFrame, idx: pd.DataFrame):
     fs = read_table("feature_selection")
     if fs is not None:
@@ -240,9 +237,7 @@ def figures(df: pd.DataFrame, idx: pd.DataFrame):
         _save_fig(fig, "weight_lorenz.png")
 
 
-# ---------------------------------------------------------------------------
-# Checks and manifest
-# ---------------------------------------------------------------------------
+# Manifest and sanity check
 def sanity_check(source: str) -> dict:
     b = read_table("baselines")
     if b is None:
@@ -258,7 +253,7 @@ def sanity_check(source: str) -> dict:
         print("  WARNING: baselines differ from the reported run. Check the data and library versions.")
     return {"status": status, "baselines": got, "difference": diff}
 
-
+# Record the environment and the results of the sanity check
 def manifest(ctx):
     versions = {}
     for name in PACKAGES:
@@ -288,7 +283,7 @@ def manifest(ctx):
         f"python {info['python']}\n" + "".join(f"{k}=={v}\n" for k, v in versions.items() if v))
     print(f"\n  wrote {path.name} and environment.txt")
 
-
+# Run the analysis stage
 def run(ctx):
     df = all_configs()
     idx = efficiency_tables(df)

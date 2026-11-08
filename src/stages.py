@@ -1,8 +1,5 @@
-"""Every experiment in the project, one function per stage.
+"""Every experiment in the project, one function per stage."""
 
-Each stage writes its own CSV to the results folder when it finishes, so a run
-that stops part-way keeps everything completed before that point.
-"""
 from __future__ import annotations
 
 import copy
@@ -29,18 +26,14 @@ def _base_row(model, track, variant, setting, **extra):
             "setting": setting, **extra}
 
 
-# ---------------------------------------------------------------------------
 # 1. Sparsity of the TF-IDF matrices
-# ---------------------------------------------------------------------------
 def sparsity(ctx):
     for split, X in (("train", ctx.X_train), ("test", ctx.X_test)):
         ctx.add("sparsity", {"split": split, **sparsity_report(X)})
     ctx.save("sparsity")
 
 
-# ---------------------------------------------------------------------------
 # 2. Tuned baselines
-# ---------------------------------------------------------------------------
 def baselines(ctx):
     for key in config.MODELS:
         model, params = ctx.baseline(key)
@@ -50,9 +43,7 @@ def baselines(ctx):
     ctx.save("baselines")
 
 
-# ---------------------------------------------------------------------------
-# 3. Track A: feature selection
-# ---------------------------------------------------------------------------
+# 3. Track A. feature selection
 def features(ctx):
     for method in config.SELECTORS:
         for key in config.MODELS:
@@ -66,9 +57,7 @@ def features(ctx):
     ctx.save("feature_selection")
 
 
-# ---------------------------------------------------------------------------
-# 4. Track A: document-frequency filtering
-# ---------------------------------------------------------------------------
+# 4. Track A. document-frequency filtering
 def docfreq(ctx):
     for min_df, max_df in config.DOCFREQ_FILTERS:
         X_train, X_test, _ = ctx.ds.vectorise(min_df=min_df, max_df=max_df)
@@ -81,9 +70,7 @@ def docfreq(ctx):
     ctx.save("docfreq")
 
 
-# ---------------------------------------------------------------------------
-# 5. Track A: magnitude weight pruning
-# ---------------------------------------------------------------------------
+# 5. Track A. magnitude weight pruning
 def weights(ctx):
     for key in config.LINEAR_MODELS:
         base, _ = ctx.baseline(key)
@@ -98,9 +85,7 @@ def weights(ctx):
     ctx.save("weight_pruning")
 
 
-# ---------------------------------------------------------------------------
-# 6. Track B: quantisation with the symmetric grid
-# ---------------------------------------------------------------------------
+# 6. Track B. quantisation with the symmetric grid
 def quant(ctx):
     for key in config.MODELS:
         base, _ = ctx.baseline(key)
@@ -118,9 +103,7 @@ def quant(ctx):
     ctx.save("quantisation")
 
 
-# ---------------------------------------------------------------------------
-# 7. Track B: four quantisation grids for the Naive Bayes tables
-# ---------------------------------------------------------------------------
+# 7. Track B. four quantisation grids for the Naive Bayes tables
 def nbgrids(ctx):
     base, _ = ctx.baseline("naive_bayes")
     reference = base.predict(ctx.X_test)
@@ -141,9 +124,7 @@ def nbgrids(ctx):
     ctx.save("nb_grids")
 
 
-# ---------------------------------------------------------------------------
 # 8. Feature pruning followed by weight pruning
-# ---------------------------------------------------------------------------
 def combined(ctx):
     for key in config.LINEAR_MODELS:
         for keep in config.COMBINED_KEEPS:
@@ -161,9 +142,7 @@ def combined(ctx):
     ctx.save("combined")
 
 
-# ---------------------------------------------------------------------------
 # 9. Real file sizes on disk after weight pruning
-# ---------------------------------------------------------------------------
 def disk(ctx):
     for key in config.LINEAR_MODELS:
         base, _ = ctx.baseline(key)
@@ -176,16 +155,8 @@ def disk(ctx):
     ctx.save("disk_size")
 
 
-# ---------------------------------------------------------------------------
-# 10. End to end: raw text in, prediction out, vectoriser included
-# ---------------------------------------------------------------------------
+# 10. End to end process. raw text in, prediction out, vectoriser included
 def deployable_vectoriser(vec):
-    """Copy of a fitted vectoriser without stop_words_.
-
-    scikit-learn stores every discarded term in stop_words_, which can be
-    megabytes. It is only used for inspection and is safe to remove before
-    saving.
-    """
     v = copy.deepcopy(vec)
     if hasattr(v, "stop_words_"):
         delattr(v, "stop_words_")
@@ -234,9 +205,7 @@ def endtoend(ctx):
     ctx.save("end_to_end")
 
 
-# ---------------------------------------------------------------------------
 # 11. Single-request latency on the pruned models, split into overhead and work
-# ---------------------------------------------------------------------------
 def latency(ctx):
     for key in config.LINEAR_MODELS:
         base, _ = ctx.baseline(key)
@@ -260,9 +229,6 @@ def latency(ctx):
                 predict_batch=lambda model=model, Xb=Xb: model.predict(Xb),
                 n_batch=Xb.shape[0], load_fresh=load_fresh)
 
-            # Overhead split: a full predict call, the same call on an empty
-            # document (the fixed cost), and the bare arithmetic with no
-            # scikit-learn code around it.
             clf = classifier(model)
             W, b = np.ascontiguousarray(clf.coef_.T), clf.intercept_
             doc, empty = X[0:1], sparse.csr_matrix((1, X.shape[1]))
@@ -282,9 +248,7 @@ def latency(ctx):
     ctx.save("latency")
 
 
-# ---------------------------------------------------------------------------
 # 12. Repeat the headline configurations across seeds
-# ---------------------------------------------------------------------------
 def multiseed(ctx):
     for seed in config.SEEDS:
         print(f"  seed {seed}")
@@ -315,18 +279,14 @@ def multiseed(ctx):
     ctx.save("multiseed")
 
 
-# ---------------------------------------------------------------------------
-# 13. Robustness: weight concentration and production edge cases
-# ---------------------------------------------------------------------------
+# 13. Robustness. weight concentration and production edge cases
 def _lorenz(w):
     """Cumulative share of total |weight| held by the largest weights."""
     v = np.sort(np.abs(w).ravel())[::-1]
     return np.arange(1, v.size + 1) / v.size, np.cumsum(v) / v.sum()
 
-
+# Weight concentration at two regularisation strengths, so the effect of model type can be separated from the effect of regularisation.
 def robustness(ctx):
-    # Weight concentration at two regularisation strengths, so the effect of
-    # model type can be separated from the effect of regularisation.
     grid = np.logspace(-4, 0, 200)
     for key, make in (("logreg", lambda c: LogisticRegression(C=c, max_iter=2000)),
                       ("linear_svm", lambda c: LinearSVC(C=c))):

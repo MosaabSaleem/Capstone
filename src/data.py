@@ -1,6 +1,6 @@
 """Loading AG News and building TF-IDF features.
 
-With source "auto" the loader tries, in order:
+When source is set to "auto", the loader tries the following in order:
   1. train.csv and test.csv in the data/ folder (original AG News layout)
   2. the Hugging Face datasets library
   3. a direct download of the original CSV files
@@ -24,7 +24,7 @@ _WHITESPACE = re.compile(r"\s+")
 _CSV_URL = "https://raw.githubusercontent.com/mhjabreel/CharCnn_Keras/master/data/ag_news_csv/"
 _CSV_COLUMNS = ["label", "title", "description"]
 
-
+# cleaning and vectorisation are done once and cached for later use
 def clean_text(text: str) -> str:
     """Lowercase, strip punctuation and collapse whitespace."""
     return _WHITESPACE.sub(" ", _NON_WORD.sub(" ", text.lower())).strip()
@@ -40,6 +40,7 @@ def make_vectoriser(**overrides) -> TfidfVectorizer:
     return TfidfVectorizer(**params)
 
 
+# dataset class holds the raw text and labels, and can vectorise on demand
 @dataclass
 class Dataset:
     X_train_text: list
@@ -54,7 +55,7 @@ class Dataset:
         X_test = csr_matrix(vec.transform(self.X_test_text))
         return X_train, X_test, vec
 
-
+# functions to load AG News from various sources, or make a synthetic dataset for testing
 def _from_frames(train: pd.DataFrame, test: pd.DataFrame) -> Dataset:
     def split(df):
         text = df["title"].fillna("") + " " + df["description"].fillna("")
@@ -112,9 +113,8 @@ def make_synthetic(n_per_class: int = 250, seed: int = config.SEED) -> Dataset:
     cut = int(0.8 * len(texts))
     return Dataset(texts[:cut], texts[cut:], labels[:cut], labels[cut:])
 
-
+# Quick mode only. Shrink the training set. The test stays the same
 def _subsample_train(ds: Dataset) -> Dataset:
-    """Quick mode only: shrink the training set. The test set never changes."""
     n = config.TRAIN_SUBSAMPLE
     if n is None or len(ds.X_train_text) <= n:
         return ds
@@ -123,6 +123,7 @@ def _subsample_train(ds: Dataset) -> Dataset:
     return Dataset(list(X), ds.X_test_text, np.asarray(y), ds.y_test)
 
 
+# main function to load AG News from the requested source, or make a synthetic dataset for testing
 def load(source: str = "auto") -> Dataset:
     if source == "synthetic":
         return make_synthetic()

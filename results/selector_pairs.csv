@@ -1,0 +1,13 @@
+comparison,model,n,mean_gap_points,wins,ties,losses
+l1 vs chi2,all,36,1.258,36,0,0
+l1 vs chi2,linear_svm,12,1.16,12,0,0
+l1 vs chi2,logreg,12,1.158,12,0,0
+l1 vs chi2,naive_bayes,12,1.456,12,0,0
+l1 vs mutual_info,all,36,1.577,35,0,1
+l1 vs mutual_info,linear_svm,12,1.299,11,0,1
+l1 vs mutual_info,logreg,12,1.427,12,0,0
+l1 vs mutual_info,naive_bayes,12,2.004,12,0,0
+chi2 vs mutual_info,all,36,0.319,31,0,5
+chi2 vs mutual_info,linear_svm,12,0.139,8,0,4
+chi2 vs mutual_info,logreg,12,0.269,11,0,1
+chi2 vs mutual_info,naive_bayes,12,0.548,12,0,0
